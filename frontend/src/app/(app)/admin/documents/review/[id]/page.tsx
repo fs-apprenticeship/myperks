@@ -50,7 +50,9 @@ export default function DocumentReviewPage() {
 
   // Form state — populated from extracted data
   const [form, setForm] = useState({
+    carryover_cap_days: "" as number | string,
     notes: "",
+    proration_method: "monthly" as "monthly" | "none",
     pto_days: "" as number | string,
     sick_days: "" as number | string,
     vacation_days: "" as number | string,
@@ -66,7 +68,9 @@ export default function DocumentReviewPage() {
       if (source) {
         setForm((prev) => ({
           ...prev,
+          carryover_cap_days: source.carryover_cap_days ?? "",
           notes: source.notes ?? "",
+          proration_method: source.proration_method ?? "monthly",
           pto_days: source.pto_days ?? "",
           sick_days: source.sick_days ?? "",
           vacation_days: source.vacation_days ?? "",
@@ -99,7 +103,9 @@ export default function DocumentReviewPage() {
         const d = data.extracted_data;
         setForm((prev) => ({
           ...prev,
+          carryover_cap_days: d.carryover_cap_days ?? "",
           notes: d.notes ?? "",
+          proration_method: d.proration_method ?? "monthly",
           pto_days: d.pto_days ?? "",
           sick_days: d.sick_days ?? "",
           vacation_days: d.vacation_days ?? "",
@@ -119,7 +125,12 @@ export default function DocumentReviewPage() {
     setSuccess(null);
     try {
       const result = await api.approveExtraction(documentId, {
+        carryover_cap_days:
+          form.carryover_cap_days !== ""
+            ? Number(form.carryover_cap_days)
+            : null,
         notes: form.notes,
+        proration_method: form.proration_method,
         pto_days: form.pto_days !== "" ? Number(form.pto_days) : null,
         sick_days: form.sick_days !== "" ? Number(form.sick_days) : null,
         vacation_days:
@@ -265,6 +276,51 @@ export default function DocumentReviewPage() {
                     </div>
                   </div>
                 ))}
+
+                <div>
+                  <label className="mb-1.5 block text-[12px] font-medium text-foreground">
+                    Vacation Carryover Cap
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="w-32 rounded-lg border border-border bg-background px-3 py-1.5 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-purple-500"
+                      max="365"
+                      min="0"
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          carryover_cap_days: e.target.value,
+                        }))
+                      }
+                      placeholder="Uncapped"
+                      step="0.5"
+                      type="number"
+                      value={form.carryover_cap_days}
+                    />
+                    <span className="text-[12px] text-muted-foreground">
+                      days (blank = uncapped, 0 = no carryover)
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[12px] font-medium text-foreground">
+                    New-Hire Proration
+                  </label>
+                  <select
+                    className="w-48 rounded-lg border border-border bg-background px-3 py-1.5 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-brand-purple-500"
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        proration_method: e.target.value as "monthly" | "none",
+                      }))
+                    }
+                    value={form.proration_method}
+                  >
+                    <option value="monthly">Monthly (by months worked)</option>
+                    <option value="none">None (full allotment)</option>
+                  </select>
+                </div>
 
                 <div>
                   <label className="mb-1.5 block text-[12px] font-medium text-foreground">

@@ -52,6 +52,7 @@ from db.models import (
 )
 from db.session import get_session
 from rag.extract import extract_document_policy
+from services.vacation import seed_employee_vacation_balances
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -233,6 +234,14 @@ async def pre_create_employee(
         benefits_year_reset=body.benefits_year_reset,
     )
     db.add(emp)
+    await db.flush()
+
+    # Seed this year's vacation balances from the department's approved
+    # policy, prorated by joined_date (T46).
+    await seed_employee_vacation_balances(
+        db, cast(int, emp.id), emp.department, emp.joined_date.year, emp.joined_date
+    )
+
     await db.commit()
     await db.refresh(emp)
 
@@ -474,6 +483,8 @@ def _parse_extraction_data(raw: str | None) -> ExtractionData | None:
             vacation_days=d.get("vacation_days"),
             sick_days=d.get("sick_days"),
             pto_days=d.get("pto_days"),
+            carryover_cap_days=d.get("carryover_cap_days"),
+            proration_method=d.get("proration_method"),
             notes=str(d.get("notes", "")),
         )
     except Exception:
@@ -600,11 +611,14 @@ async def approve_extraction(
             detail="Document must be extracted before approving. Run extraction first.",
         )
 
-    # Persist approval
+    # Persist approval. carryover_cap_days / proration_method are read back by
+    # services.vacation.seed_employee_vacation_balances (T46).
     approved: dict[str, object] = {
         "vacation_days": body.vacation_days,
         "sick_days": body.sick_days,
         "pto_days": body.pto_days,
+        "carryover_cap_days": body.carryover_cap_days,
+        "proration_method": body.proration_method,
         "notes": body.notes,
     }
     extraction.approved_data = json.dumps(approved)  # type: ignore[assignment]

@@ -17,7 +17,7 @@ Test matrix:
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Callable
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -140,11 +140,15 @@ class TestPreCreateEmployee:
         app.dependency_overrides[get_current_user] = override_auth
         app.dependency_overrides[get_session] = make_db_override(mock_session)
         try:
-            response = client.post(
-                "/admin/employees",
-                json=VALID_PRE_CREATE_BODY,
-                headers=auth_header(),
-            )
+            with patch(
+                "api.routers.admin.seed_employee_vacation_balances",
+                new=AsyncMock(return_value=3),
+            ):
+                response = client.post(
+                    "/admin/employees",
+                    json=VALID_PRE_CREATE_BODY,
+                    headers=auth_header(),
+                )
         finally:
             app.dependency_overrides.clear()
 
@@ -182,11 +186,15 @@ class TestPreCreateEmployee:
         app.dependency_overrides[get_current_user] = override_auth
         app.dependency_overrides[get_session] = make_db_override(mock_session)
         try:
-            response = client.post(
-                "/admin/employees",
-                json=VALID_PRE_CREATE_BODY,
-                headers=auth_header(),
-            )
+            with patch(
+                "api.routers.admin.seed_employee_vacation_balances",
+                new=AsyncMock(return_value=3),
+            ):
+                response = client.post(
+                    "/admin/employees",
+                    json=VALID_PRE_CREATE_BODY,
+                    headers=auth_header(),
+                )
         finally:
             app.dependency_overrides.clear()
 

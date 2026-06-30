@@ -132,6 +132,10 @@ class ExtractionData(BaseModel):
     vacation_days: float | None = None
     sick_days: float | None = None
     pto_days: float | None = None
+    # null = uncapped/unspecified carryover, 0 = forfeited, N = capped at N (T46)
+    carryover_cap_days: float | None = None
+    # "monthly" | "none" | null (not stated -> company default applies) (T46)
+    proration_method: str | None = None
     notes: str = ""
 
 
@@ -151,6 +155,12 @@ class ApproveExtractionBody(BaseModel):
     vacation_days: float | None = Field(None, ge=0, le=365)
     sick_days: float | None = Field(None, ge=0, le=365)
     pto_days: float | None = Field(None, ge=0, le=365)
+    # Carryover/proration rules persisted into approved_data so
+    # services.vacation.seed_employee_vacation_balances and the rollover job
+    # can read them (T46). null carryover means uncapped/unspecified (company
+    # default of 5 vacation days applies).
+    carryover_cap_days: float | None = Field(None, ge=0, le=365)
+    proration_method: Literal["monthly", "none"] | None = None
     notes: str = ""
     year: int = Field(..., ge=2000, le=2100)
 
