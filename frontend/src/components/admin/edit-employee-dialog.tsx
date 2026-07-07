@@ -81,7 +81,7 @@ export function EditEmployeeDialog({
       </button>
 
       <dialog
-        className="w-full max-w-sm rounded-xl border border-border bg-white p-6 shadow-xl backdrop:bg-black/40 dark:bg-card"
+        className="m-auto w-full max-w-sm rounded-xl border border-border bg-white p-6 shadow-xl backdrop:bg-black/40 dark:bg-card"
         ref={dialogRef}
       >
         <div className="mb-5 flex items-center justify-between">

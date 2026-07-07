@@ -237,6 +237,32 @@ class TestPreCreateEmployee:
 
         assert response.status_code == 422
 
+    def test_no_approved_policy_returns_422(self) -> None:
+        # First db.scalar() call is require_admin's lookup, second is the
+        # approved-policy check — must return admin then None, in that order.
+        mock_session = make_session(scalar_return=None)
+        mock_session.scalar = AsyncMock(side_effect=[make_admin_employee(), None])
+        # execute() for duplicate-email check returns None (no existing row)
+        mock_session.execute = AsyncMock(return_value=make_scalar_one_result(None))
+
+        app.dependency_overrides[get_current_user] = override_auth
+        app.dependency_overrides[get_session] = make_db_override(mock_session)
+        try:
+            response = client.post(
+                "/admin/employees",
+                json=VALID_PRE_CREATE_BODY,
+                headers=auth_header(),
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 422
+        detail = response.json()["detail"]
+        assert "approved" in detail.lower()
+        assert "engineering" in detail.lower()
+        mock_session.add.assert_not_called()
+        mock_session.commit.assert_not_called()
+
     def test_department_all_rejected_422(self) -> None:
         # "all" is a valid DB enum value (T39, document-only) but must never be
         # accepted for an employee. Guards against widening DEPARTMENT_VALUES.

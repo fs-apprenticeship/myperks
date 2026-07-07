@@ -57,11 +57,8 @@ export function PreCreateEmployeeDialog() {
       router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong.";
-      setError(
-        msg.includes("409")
-          ? "An employee with this email already exists."
-          : msg,
-      );
+      const detail = msg.match(/^API error: \d+ – (.+)$/)?.[1];
+      setError(detail ?? msg);
     } finally {
       setLoading(false);
     }
@@ -79,7 +76,7 @@ export function PreCreateEmployeeDialog() {
       </button>
 
       <dialog
-        className="w-full max-w-md rounded-xl border border-border bg-white p-6 shadow-xl backdrop:bg-black/40 dark:bg-card"
+        className="m-auto w-full max-w-md rounded-xl border border-border bg-white p-6 shadow-xl backdrop:bg-black/40 dark:bg-card"
         ref={dialogRef}
       >
         <div className="mb-5 flex items-center justify-between">
