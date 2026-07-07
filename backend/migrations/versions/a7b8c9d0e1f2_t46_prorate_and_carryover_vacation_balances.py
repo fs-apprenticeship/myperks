@@ -1,7 +1,7 @@
 """t46 prorate mid-year hires and carry over unused vacation
 
-Revision ID: e1f2a3b4c5d6
-Revises: d4f5a6b7c8e9
+Revision ID: a7b8c9d0e1f2
+Revises: e1f2a3b4c5d6
 Create Date: 2026-06-29 00:00:00.000000
 
 Adds mid-year-hire proration and capped carryover to vacation-balance seeding
@@ -17,14 +17,19 @@ SQL/Python implementation kept in sync. This migration drops that function and
 its AFTER INSERT trigger; employee creation (admin.pre_create_employee) and
 the year-boundary rollover job (services/rollover.py) both call the Python
 function directly instead.
+
+Re-parented onto e1f2a3b4c5d6 (the no-op stub added for a prior unmerged T46
+deploy) instead of reusing its revision id, per that stub's own instructions.
+The DROP statements below are idempotent (``IF EXISTS``), so it's safe to run
+here even if a prior deploy already applied them under the stub's revision.
 """
 
 from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "e1f2a3b4c5d6"
-down_revision: str | None = "d4f5a6b7c8e9"
+revision: str = "a7b8c9d0e1f2"
+down_revision: str | None = "e1f2a3b4c5d6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
