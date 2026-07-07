@@ -4,7 +4,7 @@ backend/rag/extract.py
 LLM-based extraction of structured HR policy data from a document's chunks.
 
 Given a document_id, reads all stored chunks and asks the LLM to return:
-  {vacation_days, sick_days, pto_days, notes}
+  {vacation_days, sick_days, pto_days, carryover_cap_days, proration_method, notes}
 
 The caller owns DB commit — this function only flushes the DocumentExtraction row.
 """
@@ -31,10 +31,17 @@ Extract the following information and return it as valid JSON with these exact k
   - vacation_days: annual vacation days (number, null if not found)
   - sick_days: annual sick/illness leave days (number, null if not found)
   - pto_days: annual PTO or personal days (number, null if not found)
+  - carryover_cap_days: max unused vacation days that roll over to next year
+      (number; null if the policy says carryover is unlimited/uncapped OR the
+      document does not mention carryover, 0 if unused days are forfeited)
+  - proration_method: how a mid-year hire's first-year allotment is computed
+      ("monthly" if prorated by months worked, "none" if new hires get the full
+      annual allotment regardless of start date, null if not stated)
   - notes: a plain-text summary of other relevant HR policies (string, max 300 chars)
 
 Return ONLY the JSON object, no other text.
-Example: {"vacation_days": 15, "sick_days": 10, "pto_days": 5, "notes": "..."}
+Example: {"vacation_days": 15, "sick_days": 10, "pto_days": 5, \
+"carryover_cap_days": 5, "proration_method": "monthly", "notes": "..."}
 """
 
 
@@ -126,12 +133,31 @@ async def extract_document_policy(
                 return None
             return value
 
+        def _carryover_or_none(v: object) -> float | None:
+            # null is meaningful here (uncapped/unspecified carryover), so we
+            # only coerce real numbers and drop anything out of range.
+            try:
+                value = float(v) if v is not None else None  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return None
+            if value is not None and not (0 <= value <= _MAX_ANNUAL_DAYS):
+                rejected_fields.append("carryover_cap_days")
+                return None
+            return value
+
+        def _proration_or_none(v: object) -> str | None:
+            # Only the two values the seeding function understands survive;
+            # anything else falls back to the company default downstream.
+            return str(v) if v in ("monthly", "none") else None
+
         extracted: dict[str, object] = {
             "vacation_days": _days_or_none(
                 "vacation_days", parsed.get("vacation_days")
             ),
             "sick_days": _days_or_none("sick_days", parsed.get("sick_days")),
             "pto_days": _days_or_none("pto_days", parsed.get("pto_days")),
+            "carryover_cap_days": _carryover_or_none(parsed.get("carryover_cap_days")),
+            "proration_method": _proration_or_none(parsed.get("proration_method")),
             "notes": str(parsed.get("notes", ""))[:300],
         }
 

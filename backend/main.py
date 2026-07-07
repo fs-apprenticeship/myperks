@@ -1,5 +1,8 @@
+import contextlib
+from collections.abc import AsyncIterator
 from typing import cast
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
@@ -12,9 +15,22 @@ from api.routers.employees import router as employees_router
 from api.upload import router as upload_router
 from db.models import Employee
 from db.session import AsyncSessionLocal
+from services.rollover import start_rollover_scheduler
 from settings import settings
 
-app = FastAPI(title="MyPerks API", version="0.1.0")
+
+@contextlib.asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Schedule the annual vacation-balance rollover (T46), shutting it down
+    # cleanly when the server stops.
+    scheduler: AsyncIOScheduler = start_rollover_scheduler()
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title="MyPerks API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

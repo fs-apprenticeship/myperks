@@ -19,7 +19,9 @@ export interface AdminEmployeeDetail {
 }
 
 export interface ApproveExtractionBody {
+  carryover_cap_days?: null | number;
   notes?: string;
+  proration_method?: "monthly" | "none" | null;
   pto_days?: null | number;
   sick_days?: null | number;
   vacation_days?: null | number;
@@ -69,7 +71,9 @@ export interface DocumentListResponse {
 }
 
 export interface ExtractionData {
+  carryover_cap_days: null | number;
   notes: string;
+  proration_method: "monthly" | "none" | null;
   pto_days: null | number;
   sick_days: null | number;
   vacation_days: null | number;
