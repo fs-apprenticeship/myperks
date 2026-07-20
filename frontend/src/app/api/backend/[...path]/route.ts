@@ -3,10 +3,11 @@ import { type NextRequest, NextResponse } from "next/server";
 // Edge runtime eliminates the ~6 s Node.js cold-start on this proxy route.
 export const runtime = "edge";
 
-const BACKEND_URL =
+const BACKEND_URL = (
   process.env.BACKEND_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:8000";
+  "http://localhost:8000"
+).replace(/\/+$/, "");
 
 async function handler(
   req: NextRequest,
