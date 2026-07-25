@@ -11,6 +11,7 @@ from services.notifications import (
     request_status_changed,
     request_submitted,
     resolve_recipients,
+    send_submission_receipt,
 )
 
 
@@ -165,3 +166,50 @@ def test_render_submitted_names_the_submitter() -> None:
 
     assert "Dana" in subject
     assert "sick" in subject
+
+
+# ── send_submission_receipt ───────────────────────────────────────────────────
+
+
+def test_send_submission_receipt_enqueues_to_submitter_when_enabled() -> None:
+    background = BackgroundTasks()
+    with patch.object(
+        notifications, "settings", MagicMock(notifications_email_enabled=True)
+    ):
+        send_submission_receipt(
+            background,
+            request_id=42,
+            request_type="vacation",
+            submitter_email="sub@corp.com",
+            submitter_name="Sam",
+        )
+
+    assert len(background.tasks) == 1
+    task = background.tasks[0]
+    assert cast(object, task.func) is send_email
+    assert task.kwargs["to"] == "sub@corp.com"
+    assert "#42" in cast(str, task.kwargs["body"])
+    assert "Sam" in cast(str, task.kwargs["body"])
+
+
+def test_send_submission_receipt_is_a_noop_when_disabled() -> None:
+    background = BackgroundTasks()
+    with patch.object(
+        notifications, "settings", MagicMock(notifications_email_enabled=False)
+    ):
+        send_submission_receipt(
+            background,
+            request_id=42,
+            request_type="vacation",
+            submitter_email="sub@corp.com",
+            submitter_name="Sam",
+        )
+
+    assert background.tasks == []
+
+
+def test_render_submission_receipt_copy() -> None:
+    subject, body = notifications._render_submission_receipt("sick", 7, "Dana")
+    assert subject == "We received your sick request"
+    assert "#7" in body
+    assert "Dana" in body

@@ -1,9 +1,9 @@
-# backend/api/routers/dashboard.py
-
 import datetime
 import json
+import logging
+from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,8 +19,18 @@ from api.schemas.dashboard import (
 )
 from db.models import Employee, RequestHistory, VacationBalance
 from db.session import get_session
+from services.notifications import (
+    dispatch,
+    request_submitted,
+    send_submission_receipt,
+)
 
 router = APIRouter(prefix="/me", tags=["dashboard"])
+
+logger = logging.getLogger(__name__)
+
+# Set False to send only HR-admin notifications, no submitter receipt.
+_SEND_SUBMITTER_RECEIPT = True
 
 
 # ── Shared helper ─────────────────────────────────────────────────────────────
@@ -151,6 +161,7 @@ async def get_request_history(
 )
 async def create_request(
     body: CreateRequestBody,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_session),  # noqa: B008
     clerk_user_id: str = Depends(get_current_user),  # noqa: B008
 ) -> RequestHistoryItemSchema:
@@ -169,6 +180,35 @@ async def create_request(
     db.add(new_request)
     await db.commit()
     await db.refresh(new_request)
+
+    # Best-effort: a notification failure must not affect the 201 response.
+    request_id = cast(int, new_request.id)
+    request_type = cast(str, new_request.type)
+    submitter_name = cast(str, employee.name)
+    submitter_email = cast(str, employee.email)
+    try:
+        await dispatch(
+            background_tasks,
+            db,
+            request_submitted(
+                request_id=request_id,
+                request_type=request_type,
+                submitter_name=submitter_name,
+            ),
+        )
+        if _SEND_SUBMITTER_RECEIPT:
+            send_submission_receipt(
+                background_tasks,
+                request_id=request_id,
+                request_type=request_type,
+                submitter_email=submitter_email,
+                submitter_name=submitter_name,
+            )
+    except Exception:
+        logger.exception(
+            "Failed to dispatch submit notifications for request %s",
+            request_id,
+        )
 
     return RequestHistoryItemSchema(
         id=new_request.id,

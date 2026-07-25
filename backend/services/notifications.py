@@ -91,8 +91,7 @@ async def resolve_recipients(
     Runs in-request so the DB work happens while the session is live.
     """
     if event.kind is NotificationKind.REQUEST_SUBMITTED:
-        # Every HR admin, for now.
-        # joining the department off the request's employee and filtering here.
+        # Every HR admin, for now. Future: scope to the request's department.
         employees = (
             await db.scalars(select(Employee).where(Employee.role == "hr_admin"))
         ).all()
@@ -163,4 +162,45 @@ async def dispatch(
         len(recipients),
         event.kind.value,
         event.request_id,
+    )
+
+
+def _render_submission_receipt(
+    request_type: str, request_id: int, name: str
+) -> tuple[str, str]:
+    """Return the (subject, body) receipt copy sent to the submitter."""
+    subject = f"We received your {request_type} request"
+    body = (
+        f"Hi {name}, your {request_type} request (#{request_id}) was submitted "
+        "and is pending review. "
+        "We will email you when it is approved or rejected."
+    )
+    return subject, body
+
+
+def send_submission_receipt(
+    background_tasks: BackgroundTasks,
+    *,
+    request_id: int,
+    request_type: str,
+    submitter_email: str,
+    submitter_name: str,
+) -> None:
+    """Queue a receipt email to the submitter, when email is enabled.
+
+    The address is passed in by the caller, so this needs no DB lookup.
+    """
+    if not settings.notifications_email_enabled:
+        return
+    subject, body = _render_submission_receipt(request_type, request_id, submitter_name)
+    background_tasks.add_task(
+        send_email,
+        to=submitter_email,
+        subject=subject,
+        body=body,
+    )
+    logger.info(
+        "Queued submission receipt to %s (request #%d)",
+        submitter_email,
+        request_id,
     )
