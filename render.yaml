@@ -24,3 +24,12 @@ services:
       # Set to your Vercel frontend URL, e.g. https://myperks.vercel.app
       - key: ALLOWED_ORIGINS
         sync: false
+      # Email notifications (Resend).
+      # Leave RESEND_API_KEY unset and the flag false until we want prod to send.
+      # set NOTIFICATIONS_EMAIL_ENABLED=true in the dashboard to turn delivery on.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: NOTIFICATIONS_FROM_EMAIL
+        sync: false
+      - key: NOTIFICATIONS_EMAIL_ENABLED
+        sync: false
