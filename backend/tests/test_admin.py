@@ -198,6 +198,8 @@ class TestApproveOrRejectRequest:
 
         assert response.status_code == 401
         mock_session.execute.assert_not_called()
+
+
 class TestApproveOrRejectNotifications:
     """T53 — status-changed notifications on approve/reject.
 
@@ -311,4 +313,3 @@ class TestApproveOrRejectNotifications:
         assert response.status_code == 200
         assert response.json()["new_status"] == "approved"
         mock_session.commit.assert_awaited_once()
-
