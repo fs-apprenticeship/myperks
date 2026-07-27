@@ -144,10 +144,10 @@ async def dispatch(
     Enqueues only when email notifications are enabled; ``send_email`` is itself
     a no-op when disabled, so this is a second, cheaper guard.
     """
-    recipients = await resolve_recipients(db, event)
     if not settings.notifications_email_enabled:
         return
 
+    recipients = await resolve_recipients(db, event)
     subject, body = _render(event)
     for recipient in recipients:
         background_tasks.add_task(

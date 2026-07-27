@@ -170,6 +170,9 @@ async def create_request(
     "pending". Called by the frontend after the user confirms the request in the chat.
     """
     employee = await _get_employee(clerk_user_id, db)
+    # Read submitter fields before commit (avoids relying on expire_on_commit).
+    submitter_name = cast(str, employee.name)
+    submitter_email = cast(str, employee.email)
 
     new_request = RequestHistory(
         employee_id=employee.id,
@@ -184,8 +187,6 @@ async def create_request(
     # Best-effort: a notification failure must not affect the 201 response.
     request_id = cast(int, new_request.id)
     request_type = cast(str, new_request.type)
-    submitter_name = cast(str, employee.name)
-    submitter_email = cast(str, employee.email)
     try:
         await dispatch(
             background_tasks,

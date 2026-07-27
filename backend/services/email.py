@@ -36,7 +36,7 @@ async def send_email(to: str, subject: str, body: str) -> None:
     and any provider error is caught and logged rather than propagated.
     """
     if not settings.notifications_email_enabled:
-        logger.info("Email notifications disabled: skipping send tp %s", to)
+        logger.info("Email notifications disabled: skipping send to %s", to)
         return
     try:
         await _resend_send(to, subject, body)
