@@ -1,7 +1,6 @@
-# backend/tests/test_dashboard.py
-
 import datetime
 from collections.abc import AsyncGenerator, Callable
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -9,6 +8,7 @@ from fastapi.testclient import TestClient
 from api.auth import get_current_user
 from db.session import get_session
 from main import app
+from services.notifications import NotificationKind
 
 client = TestClient(app)
 
@@ -251,3 +251,98 @@ class TestGetBenefitsSummary:
         """No Authorization header → 401."""
         response = client.get("/me/benefits-summary")
         assert response.status_code == 401
+
+
+# ── POST /me/requests ─────────────────────────────────────────────────────────
+
+
+def _make_submit_employee() -> MagicMock:
+    emp = MagicMock()
+    emp.id = 1
+    emp.name = "Alice Johnson"
+    emp.email = "alice@corp.com"
+    return emp
+
+
+def _make_submit_session() -> AsyncMock:
+    """Mock session whose refresh() fills in the DB-assigned id/created_at."""
+    session = AsyncMock()
+    session.add = MagicMock()
+
+    def _refresh(obj: Any) -> None:
+        obj.id = 123
+        obj.created_at = datetime.datetime(2026, 6, 1)
+
+    session.refresh = AsyncMock(side_effect=_refresh)
+    return session
+
+
+class TestCreateRequest:
+    def test_creates_request_and_dispatches_notifications(self) -> None:
+        emp = _make_submit_employee()
+        app.dependency_overrides[get_current_user] = override_auth
+        app.dependency_overrides[get_session] = make_db_override(_make_submit_session())
+        try:
+            with (
+                patch(
+                    "api.routers.dashboard._get_employee",
+                    new_callable=AsyncMock,
+                    return_value=emp,
+                ),
+                patch(
+                    "api.routers.dashboard.dispatch", new_callable=AsyncMock
+                ) as mock_dispatch,
+                patch("api.routers.dashboard.send_submission_receipt") as mock_receipt,
+            ):
+                response = client.post(
+                    "/me/requests",
+                    json={"type": "vacation", "body": {"days": 3}},
+                    headers=auth_header(),
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["id"] == 123
+        assert data["type"] == "vacation"
+        assert data["status"] == "pending"
+
+        mock_dispatch.assert_awaited_once()
+        assert mock_dispatch.await_args is not None
+        event = mock_dispatch.await_args.args[2]
+        assert event.kind is NotificationKind.REQUEST_SUBMITTED
+        assert event.request_type == "vacation"
+        assert event.request_id == 123
+
+        mock_receipt.assert_called_once()
+        assert mock_receipt.call_args is not None
+        assert mock_receipt.call_args.kwargs["submitter_email"] == "alice@corp.com"
+
+    def test_notification_failure_does_not_break_201(self) -> None:
+        emp = _make_submit_employee()
+        app.dependency_overrides[get_current_user] = override_auth
+        app.dependency_overrides[get_session] = make_db_override(_make_submit_session())
+        try:
+            with (
+                patch(
+                    "api.routers.dashboard._get_employee",
+                    new_callable=AsyncMock,
+                    return_value=emp,
+                ),
+                patch(
+                    "api.routers.dashboard.dispatch",
+                    new_callable=AsyncMock,
+                    side_effect=RuntimeError("boom"),
+                ),
+            ):
+                response = client.post(
+                    "/me/requests",
+                    json={"type": "sick", "body": {"days": 1}},
+                    headers=auth_header(),
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 201
+        assert response.json()["type"] == "sick"
