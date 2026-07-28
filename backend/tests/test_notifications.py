@@ -88,7 +88,7 @@ async def test_resolve_recipients_status_changed_missing_request_is_empty() -> N
 # ── dispatch ──────────────────────────────────────────────────────────────────
 
 
-async def test_dispatch_enqueues_one_email_task_per_recipient() -> None:
+async def test_dispatch_enqueues_both_channels_when_email_enabled() -> None:
     db = MagicMock()
     recipients = [
         Recipient(id=1, email="a@corp.com", name="Ana"),
@@ -109,18 +109,16 @@ async def test_dispatch_enqueues_one_email_task_per_recipient() -> None:
     ):
         await dispatch(background, db, event)
 
-    assert len(background.tasks) == 2
-    assert all(cast(object, task.func) is send_email for task in background.tasks)
-    assert [task.kwargs["to"] for task in background.tasks] == [
-        "a@corp.com",
-        "b@corp.com",
+    email_tasks = [t for t in background.tasks if cast(object, t.func) is send_email]
+    inapp_tasks = [
+        t for t in background.tasks
+        if cast(object, t.func) is notifications._persist_notification
     ]
-    first = background.tasks[0].kwargs
-    assert first["subject"] == "New vacation request from Cy"
-    assert "#10" in cast(str, first["body"])
+    assert [t.kwargs["to"] for t in email_tasks] == ["a@corp.com", "b@corp.com"]
+    assert [t.kwargs["recipient_id"] for t in inapp_tasks] == [1, 2]
+    assert email_tasks[0].kwargs["subject"] == "New vacation request from Cy"
 
-
-async def test_dispatch_is_a_noop_when_email_disabled() -> None:
+async def test_dispatch_enqueues_inapp_even_when_email_disabled() -> None:
     db = MagicMock()
     background = BackgroundTasks()
     event = request_submitted(
@@ -139,8 +137,12 @@ async def test_dispatch_is_a_noop_when_email_disabled() -> None:
     ):
         await dispatch(background, db, event)
 
-    assert background.tasks == []
-
+    # Email off, but the in-app channel still fires.
+    assert len(background.tasks) == 1
+    task = background.tasks[0]
+    assert cast(object, task.func) is notifications._persist_notification
+    assert task.kwargs["recipient_id"] == 1
+    assert task.kwargs["related_request_id"] == 10
 
 # ── _render ───────────────────────────────────────────────────────────────────
 
@@ -213,3 +215,46 @@ def test_render_submission_receipt_copy() -> None:
     assert subject == "We received your sick request"
     assert "#7" in body
     assert "Dana" in body
+
+# ── _persist_notification ─────────────────────────────────────────────────────
+
+
+async def test_persist_notification_writes_one_row() -> None:
+    session = AsyncMock()
+    session.add = MagicMock()
+    # async context manager: `async with AsyncSessionLocal() as session`
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=session)
+    cm.__aexit__ = AsyncMock(return_value=None)
+
+    with patch.object(notifications, "AsyncSessionLocal", MagicMock(return_value=cm)):
+        await notifications._persist_notification(
+            recipient_id=1,
+            notification_type="request_submitted",
+            message="hello",
+            related_request_id=10,
+        )
+
+    session.add.assert_called_once()
+    added = session.add.call_args.args[0]
+    assert added.recipient_id == 1
+    assert added.related_request_id == 10
+    assert added.type == "request_submitted"
+    assert added.message == "hello"
+    session.commit.assert_awaited_once()
+
+
+async def test_persist_notification_swallows_errors() -> None:
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(side_effect=RuntimeError("db down"))
+    cm.__aexit__ = AsyncMock(return_value=None)
+
+    with patch.object(notifications, "AsyncSessionLocal", MagicMock(return_value=cm)):
+        # Must not raise.
+        await notifications._persist_notification(
+            recipient_id=1,
+            notification_type="request_submitted",
+            message="hello",
+            related_request_id=10,
+        )
+        

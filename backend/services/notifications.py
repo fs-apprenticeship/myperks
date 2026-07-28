@@ -9,7 +9,9 @@ from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Employee, RequestHistory
+from db.models import Employee, Notification, RequestHistory 
+from db.session import AsyncSessionLocal                       
+
 from services.email import send_email
 from settings import settings
 
@@ -138,32 +140,75 @@ async def dispatch(
     db: AsyncSession,
     event: NotificationEvent,
 ) -> None:
-    """Resolve recipients in-request, then queue one email per recipient.
+    """Resolve recipients in-request, then queue per-recipient notifications.
 
-    The email send is a background task so it never blocks or fails the request.
-    Enqueues only when email notifications are enabled; ``send_email`` is itself
-    a no-op when disabled, so this is a second, cheaper guard.
+    Two channels: in-app persistence (always on) and email (flag-gated). Both
+    run as background tasks so they never block or fail the request. Recipients
+    are resolved here, while the request session is live.
     """
-    if not settings.notifications_email_enabled:
-        return
-
     recipients = await resolve_recipients(db, event)
     subject, body = _render(event)
+
     for recipient in recipients:
+        # In-app channel — always enqueued, independent of the email flag.
         background_tasks.add_task(
-            send_email,
-            to=recipient.email,
-            subject=subject,
-            body=body,
+            _persist_notification,
+            recipient_id=recipient.id,
+            notification_type=event.kind.value,
+            message=body,
+            related_request_id=event.request_id,
         )
+        # Email channel — only when enabled.
+        if settings.notifications_email_enabled:
+            background_tasks.add_task(
+                send_email,
+                to=recipient.email,
+                subject=subject,
+                body=body,
+            )
 
     logger.info(
-        "Queued %d email notification(s) for %s (request #%d)",
+        "Queued %d in-app notification(s) for %s (request #%d); email_enabled=%s",
         len(recipients),
         event.kind.value,
         event.request_id,
+        settings.notifications_email_enabled,
     )
 
+
+async def _persist_notification(
+    *,
+    recipient_id: int,
+    notification_type: str,
+    message: str,
+    related_request_id: int,
+    payload: str | None = None,
+) -> None:
+    """Write one in-app notification on its own session.
+
+    Runs as a background task after the response, so it opens its own
+    ``AsyncSessionLocal`` rather than reusing the request session (which is
+    closed by then). Takes only plain data — no ORM objects cross in. All
+    failures are caught and logged, never affecting the request.
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            session.add(
+                Notification(
+                    recipient_id=recipient_id,
+                    related_request_id=related_request_id,
+                    type=notification_type,
+                    message=message,
+                    payload=payload,
+                )
+            )
+            await session.commit()
+    except Exception:
+        logger.exception(
+            "Failed to persist in-app notification for recipient %s (request %s)",
+            recipient_id,
+            related_request_id,
+        )
 
 def _render_submission_receipt(
     request_type: str, request_id: int, name: str
