@@ -87,6 +87,9 @@ class Employee(Base):
     conversations = relationship(
         "Conversation", back_populates="employee", cascade="all, delete-orphan"
     )
+    notifications = relationship(
+        "Notification", back_populates="recipient", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Employee id={self.id} name={self.name!r}>"
@@ -331,4 +334,45 @@ class DocumentExtraction(Base):
         return (
             f"<DocumentExtraction id={self.id} document_id={self.document_id} "
             f"status={self.status!r}>"
+        )
+
+
+class Notification(Base):
+    """An in-app notification for one recipient about one request event."""
+
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    recipient_id = Column(
+        Integer,
+        ForeignKey("employees.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    related_request_id = Column(
+        Integer,
+        ForeignKey("request_histories.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    type: Mapped[str] = mapped_column(
+        Enum("request_submitted", "request_status_changed", name="notification_type"),
+        nullable=False,
+    )
+    message = Column(Text, nullable=False)
+    payload = Column(Text, nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    recipient = relationship("Employee", back_populates="notifications")
+
+    # Primary access pattern, a recipient's notifications, newest first.
+    __table_args__ = (
+        Index("ix_notifications_recipient_created", "recipient_id", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Notification id={self.id} recipient_id={self.recipient_id} "
+            f"type={self.type!r}>"
         )
