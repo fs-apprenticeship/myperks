@@ -12,7 +12,7 @@ Test matrix (T22):
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Callable
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -198,3 +198,118 @@ class TestApproveOrRejectRequest:
 
         assert response.status_code == 401
         mock_session.execute.assert_not_called()
+
+
+class TestApproveOrRejectNotifications:
+    """T53 — status-changed notifications on approve/reject.
+
+    dispatch() is patched out; these assert the trigger fires with the right
+    event and that a failing/disabled notification never affects the response.
+    """
+
+    def test_approve_dispatches_status_changed_to_owner(self) -> None:
+        req = make_pending_request(req_type="vacation")
+        requesting_emp = make_requesting_employee(employee_id=req.employee_id)
+
+        mock_session = make_session(scalar_return=make_admin_employee())
+        mock_session.execute = AsyncMock(
+            side_effect=[
+                make_scalar_one_result(req),
+                make_scalar_one_result(requesting_emp),
+                make_scalars_all_result([]),
+            ]
+        )
+
+        app.dependency_overrides[get_current_user] = override_auth
+        app.dependency_overrides[get_session] = make_db_override(mock_session)
+        with patch(
+            "api.routers.admin.dispatch", new_callable=AsyncMock
+        ) as mock_dispatch:
+            try:
+                response = client.patch(
+                    f"/admin/requests/{req.id}",
+                    json={"status": "approved"},
+                    headers=auth_header(),
+                )
+            finally:
+                app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        mock_dispatch.assert_awaited_once()
+        # dispatch(background_tasks, db, event) — event is the 3rd positional arg
+        await_args = mock_dispatch.await_args
+        assert await_args is not None
+        event = await_args.args[2]
+        assert event.request_id == req.id
+        assert event.new_status == "approved"
+        assert event.rejection_reason is None
+
+    def test_reject_dispatches_with_reason(self) -> None:
+        req = make_pending_request(req_type="vacation")
+        requesting_emp = make_requesting_employee(employee_id=req.employee_id)
+
+        mock_session = make_session(scalar_return=make_admin_employee())
+        mock_session.execute = AsyncMock(
+            side_effect=[
+                make_scalar_one_result(req),
+                make_scalar_one_result(requesting_emp),
+                make_scalars_all_result([]),
+            ]
+        )
+
+        app.dependency_overrides[get_current_user] = override_auth
+        app.dependency_overrides[get_session] = make_db_override(mock_session)
+        with patch(
+            "api.routers.admin.dispatch", new_callable=AsyncMock
+        ) as mock_dispatch:
+            try:
+                response = client.patch(
+                    f"/admin/requests/{req.id}",
+                    json={"status": "rejected", "rejection_reason": "Blackout period"},
+                    headers=auth_header(),
+                )
+            finally:
+                app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        mock_dispatch.assert_awaited_once()
+        await_args = mock_dispatch.await_args
+        assert await_args is not None
+        event = await_args.args[2]
+        assert event.request_id == req.id
+        assert event.new_status == "rejected"
+        assert event.rejection_reason == "Blackout period"
+
+    def test_notification_failure_does_not_break_response(self) -> None:
+        req = make_pending_request(req_type="vacation")
+        requesting_emp = make_requesting_employee(employee_id=req.employee_id)
+
+        mock_session = make_session(scalar_return=make_admin_employee())
+        mock_session.execute = AsyncMock(
+            side_effect=[
+                make_scalar_one_result(req),
+                make_scalar_one_result(requesting_emp),
+                make_scalars_all_result([]),
+            ]
+        )
+
+        app.dependency_overrides[get_current_user] = override_auth
+        app.dependency_overrides[get_session] = make_db_override(mock_session)
+        with patch(
+            "api.routers.admin.dispatch",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("boom"),
+        ):
+            try:
+                response = client.patch(
+                    f"/admin/requests/{req.id}",
+                    json={"status": "approved"},
+                    headers=auth_header(),
+                )
+            finally:
+                app.dependency_overrides.clear()
+
+        # Notification blew up, but the request still succeeded and committed.
+        assert response.status_code == 200
+        assert response.json()["new_status"] == "approved"
+        mock_session.commit.assert_awaited_once()
