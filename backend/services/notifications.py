@@ -9,9 +9,8 @@ from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Employee, Notification, RequestHistory 
-from db.session import AsyncSessionLocal                       
-
+from db.models import Employee, Notification, RequestHistory
+from db.session import AsyncSessionLocal
 from services.email import send_email
 from settings import settings
 

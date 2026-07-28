@@ -257,4 +257,3 @@ async def test_persist_notification_swallows_errors() -> None:
             message="hello",
             related_request_id=10,
         )
-        
