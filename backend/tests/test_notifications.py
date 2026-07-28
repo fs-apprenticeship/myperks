@@ -111,12 +111,14 @@ async def test_dispatch_enqueues_both_channels_when_email_enabled() -> None:
 
     email_tasks = [t for t in background.tasks if cast(object, t.func) is send_email]
     inapp_tasks = [
-        t for t in background.tasks
+        t
+        for t in background.tasks
         if cast(object, t.func) is notifications._persist_notification
     ]
     assert [t.kwargs["to"] for t in email_tasks] == ["a@corp.com", "b@corp.com"]
     assert [t.kwargs["recipient_id"] for t in inapp_tasks] == [1, 2]
     assert email_tasks[0].kwargs["subject"] == "New vacation request from Cy"
+
 
 async def test_dispatch_enqueues_inapp_even_when_email_disabled() -> None:
     db = MagicMock()
@@ -143,6 +145,7 @@ async def test_dispatch_enqueues_inapp_even_when_email_disabled() -> None:
     assert cast(object, task.func) is notifications._persist_notification
     assert task.kwargs["recipient_id"] == 1
     assert task.kwargs["related_request_id"] == 10
+
 
 # ── _render ───────────────────────────────────────────────────────────────────
 
@@ -215,6 +218,7 @@ def test_render_submission_receipt_copy() -> None:
     assert subject == "We received your sick request"
     assert "#7" in body
     assert "Dana" in body
+
 
 # ── _persist_notification ─────────────────────────────────────────────────────
 

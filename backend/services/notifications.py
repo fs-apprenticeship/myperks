@@ -209,6 +209,7 @@ async def _persist_notification(
             related_request_id,
         )
 
+
 def _render_submission_receipt(
     request_type: str, request_id: int, name: str
 ) -> tuple[str, str]:
