@@ -9,12 +9,13 @@ employee's dashboard balance reflects the change immediately.
 from __future__ import annotations
 
 import json
+import logging
 from collections import defaultdict
 from datetime import UTC, date, datetime
 from math import ceil
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -52,7 +53,10 @@ from db.models import (
 )
 from db.session import get_session
 from rag.extract import extract_document_policy
+from services.notifications import dispatch, request_status_changed
 from services.vacation import seed_employee_vacation_balances
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -373,6 +377,7 @@ async def list_requests(
 async def approve_or_reject_request(
     request_id: int,
     body: ApproveRejectBody,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_session),  # noqa: B008
     _admin: Employee = Depends(require_admin),  # noqa: B008
 ) -> ApproveRejectResponse:
@@ -435,7 +440,31 @@ async def approve_or_reject_request(
         req.body = json.dumps(req_body)  # type: ignore[assignment]
 
     req.status = body.status
+
+    # Capture the field the notification needs before commit (matches the
+    # dashboard trigger; safe regardless of expire_on_commit).
+    request_type = cast(str, req.type)
+
     await db.commit()
+
+    # Best-effort: a notification failure must not change the response or the
+    # 404/409 guards above.
+    try:
+        await dispatch(
+            background_tasks,
+            db,
+            request_status_changed(
+                request_id=request_id,
+                request_type=request_type,
+                new_status=body.status,
+                rejection_reason=body.rejection_reason,
+            ),
+        )
+    except Exception:
+        logger.exception(
+            "Failed to dispatch status-changed notification for request %s",
+            request_id,
+        )
 
     # Fetch updated balances to return in response
     current_year = datetime.now(UTC).year
