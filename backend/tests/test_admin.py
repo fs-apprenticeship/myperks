@@ -132,11 +132,12 @@ class TestApproveOrRejectRequest:
         app.dependency_overrides[get_current_user] = override_auth
         app.dependency_overrides[get_session] = make_db_override(mock_session)
         try:
-            response = client.patch(
-                f"/admin/requests/{req.id}",
-                json={"status": "approved"},
-                headers=auth_header(),
-            )
+            with patch("api.routers.admin.dispatch", new_callable=AsyncMock):
+                response = client.patch(
+                    f"/admin/requests/{req.id}",
+                    json={"status": "approved"},
+                    headers=auth_header(),
+                )
         finally:
             app.dependency_overrides.clear()
 
@@ -243,6 +244,7 @@ class TestApproveOrRejectNotifications:
         assert event.request_id == req.id
         assert event.new_status == "approved"
         assert event.rejection_reason is None
+        assert event.request_type == "vacation"
 
     def test_reject_dispatches_with_reason(self) -> None:
         req = make_pending_request(req_type="vacation")
@@ -279,6 +281,7 @@ class TestApproveOrRejectNotifications:
         assert event.request_id == req.id
         assert event.new_status == "rejected"
         assert event.rejection_reason == "Blackout period"
+        assert event.request_type == "vacation"
 
     def test_notification_failure_does_not_break_response(self) -> None:
         req = make_pending_request(req_type="vacation")
