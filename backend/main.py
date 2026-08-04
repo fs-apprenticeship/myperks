@@ -12,6 +12,7 @@ from api.conversations import router as conversations_router
 from api.routers.admin import router as admin_router
 from api.routers.dashboard import router as dashboard_router
 from api.routers.employees import router as employees_router
+from api.routers.notifications import router as notifications_router
 from api.upload import router as upload_router
 from db.models import Employee
 from db.session import AsyncSessionLocal
@@ -46,6 +47,7 @@ app.include_router(employees_router)
 app.include_router(upload_router)
 app.include_router(chat_router)
 app.include_router(conversations_router)
+app.include_router(notifications_router)
 
 
 @app.get("/")
