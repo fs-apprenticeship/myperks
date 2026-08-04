@@ -78,7 +78,27 @@ export interface ExtractionData {
   sick_days: null | number;
   vacation_days: null | number;
 }
+export interface MarkAllReadResponse {
+  updated: number;
+}
 
+export interface Notification {
+  created_at: string;
+  id: number;
+  message: string;
+  payload: null | string;
+  read_at: null | string;
+  related_request_id: number;
+  type: string;
+}
+
+export interface NotificationListResponse {
+  items: Notification[];
+  meta: NotificationsMeta;
+  page: number;
+  page_size: number;
+  total: number;
+}
 export interface OnboardRequest {
   email: string;
 }
@@ -128,6 +148,10 @@ interface DocumentItem {
   filename: string;
   id: number;
   uploaded_at: string;
+}
+
+interface NotificationsMeta {
+  unread_count: number;
 }
 
 export function useApi() {
@@ -213,6 +237,12 @@ export function useApi() {
         ),
       getDocuments: () => apiGet<DocumentListResponse>("/upload/documents"),
       getMe: () => apiGet<OnboardResponse>("/employees/me"),
+      listNotifications: (page: number) =>
+        apiGet<NotificationListResponse>(`/me/notifications?page=${page}`),
+      markAllNotificationsRead: () =>
+        apiPatch<MarkAllReadResponse>("/me/notifications/read-all", {}),
+      markNotificationRead: (id: number) =>
+        apiPatch<Notification>(`/me/notifications/${id}/read`, {}),
       onboard: (body: OnboardRequest) =>
         apiPost<OnboardResponse>("/employees/me", body),
       patchEmployee: (id: number, body: PatchEmployeeBody) =>
