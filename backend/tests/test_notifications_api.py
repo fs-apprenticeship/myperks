@@ -68,6 +68,12 @@ def make_first_result(value: MagicMock | None) -> MagicMock:
     return result
 
 
+def make_one_result(value: tuple[int, int]) -> MagicMock:
+    result = MagicMock()
+    result.one = MagicMock(return_value=value)
+    return result
+
+
 # ── GET /me/notifications ─────────────────────────────────────────────────────
 
 
@@ -79,11 +85,10 @@ def test_list_returns_newest_first_with_unread_count() -> None:
     session.execute = AsyncMock(
         side_effect=[
             make_first_result(employee),  # _get_employee
+            make_one_result((3, 2)),  # total, unread_count
             make_scalars_all_result(notes),  # the page query
         ]
     )
-    # total, then unread_count
-    session.scalar = AsyncMock(side_effect=[3, 2])
 
     app.dependency_overrides[get_current_user] = override_auth
     app.dependency_overrides[get_session] = make_db_override(session)
