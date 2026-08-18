@@ -32,32 +32,30 @@ async def _get_employee(clerk_user_id: str, db: AsyncSession) -> Employee:
     return employee
 
 
-@router.get("/notifications", response_model=NotificationListResponse)
+@router.get(
+    "/notifications",
+    response_model=NotificationListResponse,
+    summary="List the caller's notifications",
+)
 async def list_notifications(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_session),  # noqa: B008
     clerk_user_id: str = Depends(get_current_user),  # noqa: B008
 ) -> NotificationListResponse:
     employee = await _get_employee(clerk_user_id, db)
     me = cast(int, employee.id)
 
-    total = cast(
-        int,
-        await db.scalar(
-            select(func.count())
-            .select_from(Notification)
-            .where(Notification.recipient_id == me)
-        ),
-    )
-    unread_count = cast(
-        int,
-        await db.scalar(
-            select(func.count())
-            .select_from(Notification)
-            .where(Notification.recipient_id == me, Notification.read_at.is_(None))
-        ),
-    )
+    # Both counts in one round trip; FILTER narrows the unread tally without a
+    # second scan of the same rows.
+    total, unread_count = (
+        await db.execute(
+            select(
+                func.count(Notification.id),
+                func.count(Notification.id).filter(Notification.read_at.is_(None)),
+            ).where(Notification.recipient_id == me)
+        )
+    ).one()
 
     rows = (
         (
@@ -82,7 +80,11 @@ async def list_notifications(
     )
 
 
-@router.patch("/notifications/{notification_id}/read", response_model=MarkReadResponse)
+@router.patch(
+    "/notifications/{notification_id}/read",
+    response_model=MarkReadResponse,
+    summary="Mark one notification read",
+)
 async def mark_notification_read(
     notification_id: int,
     db: AsyncSession = Depends(get_session),  # noqa: B008
@@ -117,7 +119,11 @@ async def mark_notification_read(
     )
 
 
-@router.patch("/notifications/read-all", response_model=MarkAllReadResponse)
+@router.patch(
+    "/notifications/read-all",
+    response_model=MarkAllReadResponse,
+    summary="Mark all the caller's notifications read",
+)
 async def mark_all_notifications_read(
     db: AsyncSession = Depends(get_session),  # noqa: B008
     clerk_user_id: str = Depends(get_current_user),  # noqa: B008
@@ -129,6 +135,7 @@ async def mark_all_notifications_read(
         update(Notification)
         .where(Notification.recipient_id == me, Notification.read_at.is_(None))
         .values(read_at=datetime.datetime.now(datetime.UTC))
+        .execution_options(synchronize_session=False)
     )
     await db.commit()
 
