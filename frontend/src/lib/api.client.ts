@@ -82,27 +82,22 @@ export interface MarkAllReadResponse {
   updated: number;
 }
 
-export interface Notification {
-  created_at: string;
+export interface MarkReadResponse {
   id: number;
-  message: string;
-  payload: null | string;
-  read_at: null | string;
-  related_request_id: number;
-  type: string;
+  read_at: string;
 }
 
 export interface NotificationListResponse {
-  items: Notification[];
+  items: NotificationItem[];
   meta: NotificationsMeta;
   page: number;
   page_size: number;
   total: number;
 }
+
 export interface OnboardRequest {
   email: string;
 }
-
 export interface OnboardResponse {
   benefits_year_reset: string;
   clerk_user_id: string;
@@ -148,6 +143,16 @@ interface DocumentItem {
   filename: string;
   id: number;
   uploaded_at: string;
+}
+
+interface NotificationItem {
+  created_at: string;
+  id: number;
+  message: string;
+  payload: null | string;
+  read_at: null | string;
+  related_request_id: number;
+  type: "request_status_changed" | "request_submitted";
 }
 
 interface NotificationsMeta {
@@ -237,12 +242,12 @@ export function useApi() {
         ),
       getDocuments: () => apiGet<DocumentListResponse>("/upload/documents"),
       getMe: () => apiGet<OnboardResponse>("/employees/me"),
-      listNotifications: (page: number) =>
+      listNotifications: (page = 1) =>
         apiGet<NotificationListResponse>(`/me/notifications?page=${page}`),
       markAllNotificationsRead: () =>
         apiPatch<MarkAllReadResponse>("/me/notifications/read-all", {}),
       markNotificationRead: (id: number) =>
-        apiPatch<Notification>(`/me/notifications/${id}/read`, {}),
+        apiPatch<MarkReadResponse>(`/me/notifications/${id}/read`, {}),
       onboard: (body: OnboardRequest) =>
         apiPost<OnboardResponse>("/employees/me", body),
       patchEmployee: (id: number, body: PatchEmployeeBody) =>
