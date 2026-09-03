@@ -1,8 +1,8 @@
 "use client";
 
 import { UserButton } from "@clerk/nextjs";
-import { Bell } from "lucide-react";
 
+import { NotificationsMenu } from "./notifications-menu";
 import { ThemeToggle } from "./theme-toggle";
 
 export function TopBar() {
@@ -13,17 +13,7 @@ export function TopBar() {
       </span>
       <div className="flex items-center gap-3">
         <ThemeToggle />
-        <button
-          aria-label="Notifications"
-          className="relative text-muted-foreground"
-          type="button"
-        >
-          <Bell className="h-[17px] w-[17px]" />
-          <span
-            aria-hidden="true"
-            className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full border-[1.5px] border-white bg-brand-amber-400"
-          />
-        </button>
+        <NotificationsMenu />
         <UserButton afterSignOutUrl="/sign-in" />
       </div>
     </header>

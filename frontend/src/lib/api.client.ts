@@ -87,6 +87,16 @@ export interface MarkReadResponse {
   read_at: string;
 }
 
+export interface NotificationItem {
+  created_at: string;
+  id: number;
+  message: string;
+  payload: null | string;
+  read_at: null | string;
+  related_request_id: number;
+  type: "request_status_changed" | "request_submitted";
+}
+
 export interface NotificationListResponse {
   items: NotificationItem[];
   meta: NotificationsMeta;
@@ -94,10 +104,10 @@ export interface NotificationListResponse {
   page_size: number;
   total: number;
 }
-
 export interface OnboardRequest {
   email: string;
 }
+
 export interface OnboardResponse {
   benefits_year_reset: string;
   clerk_user_id: string;
@@ -143,16 +153,6 @@ interface DocumentItem {
   filename: string;
   id: number;
   uploaded_at: string;
-}
-
-interface NotificationItem {
-  created_at: string;
-  id: number;
-  message: string;
-  payload: null | string;
-  read_at: null | string;
-  related_request_id: number;
-  type: "request_status_changed" | "request_submitted";
 }
 
 interface NotificationsMeta {

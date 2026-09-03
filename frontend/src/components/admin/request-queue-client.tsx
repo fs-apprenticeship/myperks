@@ -8,6 +8,7 @@ import type { AdminRequestListItem } from "@/lib/api.server";
 import { RequestDetailDialog } from "@/components/admin/request-detail-dialog";
 import { ConfirmDialog } from "@/components/history/confirm-dialog";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { triggerNotificationsRefresh } from "@/hooks/use-notifications";
 import { useApi } from "@/lib/api.client";
 import {
   formatRequestType,
@@ -84,6 +85,7 @@ export function RequestQueueClient({
 
       setConfirmTarget(null);
       setRejectionReason("");
+      triggerNotificationsRefresh();
       router.refresh();
     } catch (err) {
       setError(
