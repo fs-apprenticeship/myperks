@@ -12,6 +12,7 @@ import { ChatInput } from "@/components/assistant/chat-input";
 import { ChatMessages } from "@/components/assistant/chat-messages";
 import { RequestConfirmationCard } from "@/components/assistant/request-confirmation-card";
 import { WelcomeScreen } from "@/components/assistant/welcome-screen";
+import { triggerNotificationsRefresh } from "@/hooks/use-notifications";
 import { useApi } from "@/lib/api.client";
 import { streamChat } from "@/lib/chat-stream";
 import { getConversation } from "@/lib/conversations";
@@ -217,6 +218,7 @@ export function AssistantClient() {
         type: pendingRequest.type,
       });
       setRequestSubmitted(true);
+      triggerNotificationsRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit request");
     } finally {

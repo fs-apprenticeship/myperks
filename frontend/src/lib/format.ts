@@ -34,6 +34,21 @@ export function formatIsoMonthYear(iso: string): string {
   });
 }
 
+/** Format an ISO datetime as a short relative time, e.g. "5m ago", "3h ago", "2d ago". */
+export function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffSec = Math.max(0, Math.round(diffMs / 1000));
+
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  const diffDay = Math.round(diffHour / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return formatIsoDate(iso);
+}
+
 export function formatRequestType(type: string): string {
   if (type.toLowerCase() === "pto") return "PTO";
   return type.charAt(0).toUpperCase() + type.slice(1);
